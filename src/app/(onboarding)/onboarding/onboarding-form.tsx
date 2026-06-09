@@ -26,12 +26,23 @@ const CONTACT_METHODS = [
   { value: "CALL", label: "Call", icon: Phone },
 ] as const;
 
-export function OnboardingForm() {
+interface OnboardingFormProps {
+  existingData?: {
+    fullName: string;
+    preferredContact: string;
+    phoneNumber: string;
+  };
+}
+
+export function OnboardingForm({ existingData }: OnboardingFormProps) {
   const router = useRouter();
   const { data: session } = useSession();
-  const [fullName, setFullName] = useState("");
-  const [preferredContact, setPreferredContact] = useState("SLACK");
+  const [fullName, setFullName] = useState(existingData?.fullName ?? "");
+  const [preferredContact, setPreferredContact] = useState(existingData?.preferredContact ?? "SLACK");
+  const [phoneNumber, setPhoneNumber] = useState(existingData?.phoneNumber ?? "");
   const [saving, setSaving] = useState(false);
+
+  const isReturningUser = !!existingData?.fullName;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -41,14 +52,27 @@ export function OnboardingForm() {
       return;
     }
 
+    if (!phoneNumber.trim()) {
+      toast.error("Please enter your phone number");
+      return;
+    }
+
+    // E.164 validation
+    const phoneRegex = /^\+[1-9]\d{1,14}$/;
+    if (!phoneRegex.test(phoneNumber.trim())) {
+      toast.error("Phone number must be in E.164 format (e.g. +15551234567)");
+      return;
+    }
+
     setSaving(true);
     try {
       await api.profile.update({
         fullName: fullName.trim(),
         preferredContact,
+        phoneNumber: phoneNumber.trim(),
         onboarded: true,
       });
-      toast.success("Welcome aboard! Your profile is set up.");
+      toast.success(isReturningUser ? "Profile updated!" : "Welcome aboard! Your profile is set up.");
       router.push("/dashboard");
       router.refresh();
     } catch (err) {
@@ -66,9 +90,15 @@ export function OnboardingForm() {
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
               <UserCircle className="h-6 w-6 text-primary" />
             </div>
-            <CardTitle className="text-2xl font-heading">Welcome to the KFX L3 Support Tracker</CardTitle>
+            <CardTitle className="text-2xl font-heading">
+              {isReturningUser
+                ? "Complete Your Profile"
+                : "Welcome to the KFX L3 Support Tracker"}
+            </CardTitle>
             <CardDescription>
-              Let&apos;s get your profile set up. This helps your team know how to reach you when you&apos;re on-call.
+              {isReturningUser
+                ? "We need your phone number to complete your profile. This helps your team reach you when you're on-call."
+                : "Let\u0027s get your profile set up. This helps your team know how to reach you when you\u0027re on-call."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -84,6 +114,22 @@ export function OnboardingForm() {
               />
               <p className="text-xs text-muted-foreground">
                 This is how your name will appear in the schedule and reports
+              </p>
+            </div>
+
+            {/* Phone Number */}
+            <div className="space-y-2">
+              <Label htmlFor="onboard-phone">Phone Number</Label>
+              <Input
+                id="onboard-phone"
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                placeholder="+15551234567"
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                E.164 format required (e.g. +15551234567). Stored encrypted. Visible to your team when you&apos;re on-call.
               </p>
             </div>
 
@@ -137,8 +183,8 @@ export function OnboardingForm() {
                   />
                 )}
                 <div>
-                  <p className="text-sm">{session?.user?.name ?? "—"}</p>
-                  <p className="text-xs text-muted-foreground">{session?.user?.email ?? "—"}</p>
+                  <p className="text-sm">{session?.user?.name ?? "\u2014"}</p>
+                  <p className="text-xs text-muted-foreground">{session?.user?.email ?? "\u2014"}</p>
                 </div>
               </div>
             </div>
@@ -146,7 +192,7 @@ export function OnboardingForm() {
           <CardFooter>
             <Button type="submit" className="w-full" disabled={saving}>
               {saving ? <Spinner /> : <ArrowRight className="h-4 w-4" />}
-              {saving ? "Setting up..." : "Get Started"}
+              {saving ? "Setting up..." : isReturningUser ? "Save & Continue" : "Get Started"}
             </Button>
           </CardFooter>
         </Card>

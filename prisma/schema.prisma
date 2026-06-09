@@ -17,6 +17,7 @@ model User {
   image            String?
   roles            Role[]         @default([ENGINEER])
   preferredContact ContactMethod  @default(SLACK)
+  encryptedPhone   String?
   verified         Boolean        @default(false)
   onboarded        Boolean        @default(false)
   isActive         Boolean        @default(true)

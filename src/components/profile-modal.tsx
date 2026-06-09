@@ -41,6 +41,7 @@ export function ProfileModal({ open, onOpenChange }: Props) {
   const { data: session } = useSession();
   const [fullName, setFullName] = useState("");
   const [preferredContact, setPreferredContact] = useState("SLACK");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -53,6 +54,7 @@ export function ProfileModal({ open, onOpenChange }: Props) {
         .then((data) => {
           if (data.fullName) setFullName(data.fullName);
           if (data.preferredContact) setPreferredContact(data.preferredContact);
+          if (data.phoneNumber) setPhoneNumber(data.phoneNumber);
         })
         .catch(() => {})
         .finally(() => setLoading(false));
@@ -65,11 +67,23 @@ export function ProfileModal({ open, onOpenChange }: Props) {
       return;
     }
 
+    if (!phoneNumber.trim()) {
+      toast.error("Phone number is required");
+      return;
+    }
+
+    const phoneRegex = /^\+[1-9]\d{1,14}$/;
+    if (!phoneRegex.test(phoneNumber.trim())) {
+      toast.error("Phone number must be in E.164 format (e.g. +15551234567)");
+      return;
+    }
+
     setSaving(true);
     try {
       await api.profile.update({
         fullName: fullName.trim(),
         preferredContact,
+        phoneNumber: phoneNumber.trim(),
       });
       toast.success("Profile updated");
       onOpenChange(false);
@@ -106,6 +120,21 @@ export function ProfileModal({ open, onOpenChange }: Props) {
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="e.g. John Smith"
               />
+            </div>
+
+            {/* Editable: Phone Number */}
+            <div className="space-y-2">
+              <Label htmlFor="profile-phone">Phone Number</Label>
+              <Input
+                id="profile-phone"
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                placeholder="+15551234567"
+              />
+              <p className="text-xs text-muted-foreground">
+                E.164 format (e.g. +15551234567). Stored encrypted.
+              </p>
             </div>
 
             {/* Editable: Preferred Contact Method */}

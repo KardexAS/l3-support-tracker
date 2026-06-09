@@ -2,9 +2,10 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Phone, Calendar, ArrowLeftRight, Clock } from "lucide-react";
+import { Phone, Calendar, ArrowLeftRight, Clock, MessageSquare, MessageCircle, Monitor } from "lucide-react";
 import { format, startOfWeek, endOfWeek } from "date-fns";
 import Link from "next/link";
+import { decrypt } from "@/lib/encryption";
 
 export const dynamic = "force-dynamic";
 
@@ -88,6 +89,31 @@ export default async function DashboardPage() {
             <p className="text-xs text-muted-foreground">
               Week of {format(weekStart, "MMM d")} - {format(weekEnd, "MMM d")}
             </p>
+            {currentSchedule?.user && (
+              <div className="mt-3 space-y-1.5 border-t pt-3">
+                <div className="flex items-center gap-1.5 text-xs">
+                  <Phone className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-muted-foreground">
+                    {currentSchedule.user.encryptedPhone
+                      ? decrypt(currentSchedule.user.encryptedPhone)
+                      : "No phone on file"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs">
+                  {currentSchedule.user.preferredContact === "SMS" && <MessageSquare className="h-3 w-3 text-muted-foreground" />}
+                  {currentSchedule.user.preferredContact === "SLACK" && <MessageCircle className="h-3 w-3 text-muted-foreground" />}
+                  {currentSchedule.user.preferredContact === "TEAMS" && <Monitor className="h-3 w-3 text-muted-foreground" />}
+                  {currentSchedule.user.preferredContact === "CALL" && <Phone className="h-3 w-3 text-muted-foreground" />}
+                  <span className="text-muted-foreground">
+                    Preferred: {currentSchedule.user.preferredContact === "SMS" ? "Text (SMS)" :
+                      currentSchedule.user.preferredContact === "SLACK" ? "Slack" :
+                      currentSchedule.user.preferredContact === "TEAMS" ? "Teams" :
+                      currentSchedule.user.preferredContact === "CALL" ? "Call" :
+                      currentSchedule.user.preferredContact}
+                  </span>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

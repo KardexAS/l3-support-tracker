@@ -175,7 +175,7 @@ export const api = {
   // ── Profile ──────────────────────────────────────────────────────────────
   profile: {
     /** Get the current user's profile. */
-    get: () => request<{ fullName: string | null; preferredContact: string }>("/api/profile"),
+    get: () => request<{ fullName: string | null; preferredContact: string; phoneNumber: string | null }>("/api/profile"),
 
     /** Update the current user's profile. */
     update: (data: Record<string, unknown>) =>

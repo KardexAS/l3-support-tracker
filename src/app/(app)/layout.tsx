@@ -15,14 +15,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (session?.user?.id) {
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { verified: true, onboarded: true },
+      select: { verified: true, onboarded: true, encryptedPhone: true },
     });
 
     if (user && !user.verified) {
       redirect("/verify");
     }
 
-    if (user && !user.onboarded) {
+    if (user && (!user.onboarded || !user.encryptedPhone)) {
       redirect("/onboarding");
     }
   }

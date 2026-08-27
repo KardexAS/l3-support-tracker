@@ -113,8 +113,8 @@ describe("Swap Permissions", () => {
       mockPrisma.schedule.findFirst.mockResolvedValue({
         id: "sched-1",
         userId: "user-1",
-        weekStart: new Date("2026-06-01"),
-        weekEnd: new Date("2026-06-07"),
+        weekStart: new Date("2026-06-01T12:00:00"),
+        weekEnd: new Date("2026-06-07T12:00:00"),
       });
       mockPrisma.swapPost.update.mockResolvedValue({ id: "sw1", status: "CLAIMED" });
       mockPrisma.schedule.update.mockResolvedValue({});

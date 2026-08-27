@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,6 +37,41 @@ export function GenerateRotationForm({ engineers, deprioritizedIds }: Props) {
   const [startDate, setStartDate] = useState("");
   const [weeks, setWeeks] = useState("12");
   const [loading, setLoading] = useState(false);
+  // Live-recomputed de-prioritized IDs based on current form inputs.
+  // Falls back to the server-provided initial set (next-12-weeks) until
+  // the user picks a start date.
+  const [liveDeprioritizedIds, setLiveDeprioritizedIds] =
+    useState<string[]>(deprioritizedIds);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!startDate) {
+      setLiveDeprioritizedIds(deprioritizedIds);
+      return;
+    }
+    const w = parseInt(weeks, 10);
+    if (!Number.isFinite(w) || w < 1 || w > 52) return;
+
+    let cancelled = false;
+    setPreviewLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const { userIds } = await api.schedule.deprioritized(startDate, w);
+        if (!cancelled) setLiveDeprioritizedIds(userIds);
+      } catch {
+        // Silently fall back to the last-known list; the actual generation
+        // will re-check server-side anyway.
+      } finally {
+        if (!cancelled) setPreviewLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [open, startDate, weeks, deprioritizedIds]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -96,12 +131,15 @@ export function GenerateRotationForm({ engineers, deprioritizedIds }: Props) {
             />
           </div>
           <div className="rounded-md bg-muted p-3">
-            <p className="text-sm text-muted-foreground">
-              This will create a round-robin rotation with the following {engineers.length} engineers:
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-muted-foreground">
+                This will create a round-robin rotation with the following {engineers.length} engineers:
+              </p>
+              {previewLoading && <Spinner />}
+            </div>
             <ul className="mt-2 text-sm space-y-1 max-h-48 overflow-y-auto">
               {engineers.map((eng) => {
-                const isDeprioritized = deprioritizedIds.includes(eng.id);
+                const isDeprioritized = liveDeprioritizedIds.includes(eng.id);
                 return (
                   <li key={eng.id} className="flex items-center gap-2">
                     <span>{eng.fullName ?? eng.name ?? eng.email}</span>
@@ -114,9 +152,14 @@ export function GenerateRotationForm({ engineers, deprioritizedIds }: Props) {
                 );
               })}
             </ul>
-            {deprioritizedIds.length > 0 && (
+            {liveDeprioritizedIds.length > 0 && (
               <p className="text-xs text-muted-foreground mt-2">
-                De-prioritized engineers have self-assigned weeks in the upcoming window and will be placed last in the rotation order.
+                De-prioritized engineers have self-assigned weeks in the selected generation window and will be placed last in the rotation order.
+              </p>
+            )}
+            {!startDate && (
+              <p className="text-xs text-muted-foreground mt-2 italic">
+                Showing de-prioritized engineers for the next 12 weeks. Pick a start date to preview the actual window.
               </p>
             )}
           </div>

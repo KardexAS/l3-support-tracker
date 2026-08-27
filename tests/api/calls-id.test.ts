@@ -31,7 +31,7 @@ describe("GET /api/calls/[id]", () => {
       severity: "P2",
       title: "Test call",
       user: { id: "u1", name: "Alice", email: "a@test.com", image: null },
-      schedule: { id: "s1", weekStart: new Date("2026-06-01"), weekEnd: new Date("2026-06-07") },
+      schedule: { id: "s1", weekStart: new Date("2026-06-01T12:00:00"), weekEnd: new Date("2026-06-07T12:00:00") },
     };
     mockPrisma.callLog.findUnique.mockResolvedValue(call);
 

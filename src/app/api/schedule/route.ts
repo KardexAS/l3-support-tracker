@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { addWeeks, startOfWeek, endOfWeek, isBefore, startOfDay } from "date-fns";
+import { addDays, addWeeks, startOfWeek, endOfWeek, isBefore, startOfDay } from "date-fns";
 import { notifyVolunteer, notifyRotationReminder } from "@/lib/slack";
 import { notifyWeekAssigned } from "@/lib/notifications";
 import { hasAnyRole, canSelfAssign, canManageSchedule } from "@/lib/auth-guard";
@@ -94,7 +94,7 @@ async function handleSelfAssign(
     ? weekStart.slice(0, 10)
     : weekStart;
   const weekStartDate = startOfWeek(new Date(weekStartStr + "T12:00:00"), { weekStartsOn: 1 });
-  const weekEndDate = endOfWeek(weekStartDate, { weekStartsOn: 1 });
+  const weekEndDate = addDays(weekStartDate, 6);
   const today = startOfDay(new Date());
 
   // Validate: week must not have already ended
@@ -233,7 +233,7 @@ async function handleGenerateRotation(body: {
       continue;
     }
 
-    const weekEndDate = endOfWeek(weekStartDate, { weekStartsOn: 1 });
+    const weekEndDate = addDays(weekStartDate, 6);
     const engineerId = rotationOrder[rotationIdx % rotationOrder.length];
 
     schedules.push({
@@ -290,7 +290,7 @@ async function handleCreateEntry(body: {
     ? weekStart.slice(0, 10)
     : weekStart;
   const weekStartDate = startOfWeek(new Date(weekStartStr + "T12:00:00"), { weekStartsOn: 1 });
-  const weekEndDate = endOfWeek(weekStartDate, { weekStartsOn: 1 });
+  const weekEndDate = addDays(weekStartDate, 6);
 
   const schedule = await prisma.schedule.create({
     data: {

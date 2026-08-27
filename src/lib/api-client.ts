@@ -80,6 +80,12 @@ export const api = {
         body: { action: "generate", ...data },
       }),
 
+    /** Preview which engineers will be de-prioritized for a given generation window. */
+    deprioritized: (startDate: string, weeks: number) =>
+      request<{ userIds: string[] }>(
+        `/api/schedule/deprioritized?startDate=${startDate}&weeks=${weeks}`
+      ),
+
     /** Reassign a schedule entry to another user (admin). */
     reassign: (id: string, userId: string) =>
       request("/api/schedule", {

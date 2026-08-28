@@ -7,7 +7,15 @@
  * assignment).
  */
 
-type UserRef = { fullName: string | null; name: string | null };
+type ContactMethod = "SMS" | "SLACK" | "TEAMS" | "CALL";
+
+type UserRef = {
+  fullName: string | null;
+  name: string | null;
+  preferredContact: ContactMethod;
+  /** Decrypted phone number (or null if not on file). */
+  phoneNumber: string | null;
+};
 
 export interface ScheduleForIcs {
   id: string;
@@ -26,16 +34,12 @@ export function buildScheduleIcs(schedules: ScheduleForIcs[]): string {
   const events: string[] = [];
 
   for (const schedule of schedules) {
-    const assigneeName =
-      schedule.user.fullName || schedule.user.name || "Unknown";
     const weekStartDate = new Date(schedule.weekStart);
 
-    const coverageMap = new Map<string, string>();
+    const coverageMap = new Map<string, UserRef>();
     for (const coverage of schedule.dayCoverages) {
       const dateKey = formatDateKey(new Date(coverage.date));
-      const coverName =
-        coverage.user.fullName || coverage.user.name || "Unknown";
-      coverageMap.set(dateKey, coverName);
+      coverageMap.set(dateKey, coverage.user);
     }
 
     for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
@@ -43,7 +47,9 @@ export function buildScheduleIcs(schedules: ScheduleForIcs[]): string {
       dayDate.setDate(dayDate.getDate() + dayOffset);
 
       const dateKey = formatDateKey(dayDate);
-      const onCallName = coverageMap.get(dateKey) || assigneeName;
+      const onCallUser = coverageMap.get(dateKey) || schedule.user;
+      const onCallName =
+        onCallUser.fullName || onCallUser.name || "Unknown";
 
       const dtStart = formatIcsDate(dayDate);
       const nextDay = new Date(dayDate);
@@ -57,6 +63,9 @@ export function buildScheduleIcs(schedules: ScheduleForIcs[]): string {
         year: "numeric",
       });
 
+      const contactLine = formatContactLine(onCallUser);
+      const description = `On-call rotation week of ${weekLabel}\\n${contactLine}`;
+
       events.push(
         [
           "BEGIN:VEVENT",
@@ -64,7 +73,7 @@ export function buildScheduleIcs(schedules: ScheduleForIcs[]): string {
           `DTSTART;VALUE=DATE:${dtStart}`,
           `DTEND;VALUE=DATE:${dtEnd}`,
           `SUMMARY:On-Call: ${escapeIcsText(onCallName)}`,
-          `DESCRIPTION:On-call rotation week of ${weekLabel}`,
+          `DESCRIPTION:${escapeIcsText(description, { preserveEscapedNewlines: true })}`,
           "TRANSP:TRANSPARENT",
           "END:VEVENT",
         ].join("\r\n")
@@ -85,6 +94,51 @@ export function buildScheduleIcs(schedules: ScheduleForIcs[]): string {
   ].join("\r\n");
 }
 
+/**
+ * Build the human-readable "contact" line included in each event's DESCRIPTION.
+ *
+ * Examples:
+ *   - "Please contact by: Text - 513-515-0842"
+ *   - "Please contact by: Call - phone not on file"
+ *   - "Please contact by: Slack"
+ *   - "Please contact by: Teams"
+ */
+function formatContactLine(user: UserRef): string {
+  const phone = user.phoneNumber
+    ? formatPhoneForDisplay(user.phoneNumber)
+    : "phone not on file";
+  switch (user.preferredContact) {
+    case "SMS":
+      return `Please contact by: Text - ${phone}`;
+    case "CALL":
+      return `Please contact by: Call - ${phone}`;
+    case "SLACK":
+      return "Please contact by: Slack";
+    case "TEAMS":
+      return "Please contact by: Teams";
+    default:
+      return "Contact method not specified";
+  }
+}
+
+/**
+ * Format a stored phone number for human display.
+ *
+ * Strips non-digits, drops a US country-code leading "1", and renders as
+ * XXX-XXX-XXXX when 10 digits remain. Falls back to the raw digit string
+ * for anything unexpected so we never crash on odd input.
+ */
+export function formatPhoneForDisplay(raw: string): string {
+  let digits = raw.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) {
+    digits = digits.slice(1);
+  }
+  if (digits.length === 10) {
+    return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  return digits || raw;
+}
+
 /** Format a Date to YYYYMMDD for ICS DATE values. */
 export function formatIcsDate(date: Date): string {
   const y = date.getFullYear();
@@ -101,8 +155,31 @@ export function formatDateKey(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-/** Escape text for ICS properties (commas, semicolons, backslashes, newlines). */
-export function escapeIcsText(text: string): string {
+/**
+ * Escape text for ICS properties (commas, semicolons, backslashes, newlines).
+ *
+ * When `preserveEscapedNewlines` is true, existing "\\n" sequences in the input
+ * are preserved as ICS line breaks instead of being double-escaped (used for
+ * DESCRIPTION content that pre-embeds newlines).
+ */
+export function escapeIcsText(
+  text: string,
+  opts: { preserveEscapedNewlines?: boolean } = {}
+): string {
+  if (opts.preserveEscapedNewlines) {
+    // Split on the literal two-character sequence "\n", escape each segment
+    // independently, then rejoin with an ICS line break.
+    return text
+      .split("\\n")
+      .map((segment) =>
+        segment
+          .replace(/\\/g, "\\\\")
+          .replace(/;/g, "\\;")
+          .replace(/,/g, "\\,")
+          .replace(/\n/g, "\\n")
+      )
+      .join("\\n");
+  }
   return text
     .replace(/\\/g, "\\\\")
     .replace(/;/g, "\\;")

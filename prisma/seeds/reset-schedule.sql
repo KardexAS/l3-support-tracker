@@ -16,7 +16,7 @@
 --
 -- Leaves intact:
 --   User, Account, Session, CompensationRule, Holiday, SlackConfig,
---   Notification, InviteCode, CalendarToken
+--   Notification, InviteCode
 --
 -- LOCAL DEV ONLY. Do NOT run against production.
 -- ============================================================================

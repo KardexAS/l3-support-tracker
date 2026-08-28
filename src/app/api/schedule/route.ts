@@ -193,19 +193,22 @@ async function handleGenerateRotation(body: {
       .map((e) => e.userId)
   );
 
-  // Build prioritized rotation order: non-self-assigned first, self-assigned last
+  // Build separate pools: regulars go first, deprioritized only after all
+  // regulars have received at least one week in this generation window.
   const regularPool = engineerIds.filter((id) => !selfAssignedEngineerIds.has(id));
   const deprioritizedPool = engineerIds.filter((id) => selfAssignedEngineerIds.has(id));
-  const rotationOrder = [...regularPool, ...deprioritizedPool];
 
-  if (rotationOrder.length === 0) {
+  if (regularPool.length === 0 && deprioritizedPool.length === 0) {
     return NextResponse.json(
       { error: "No engineers available for rotation" },
       { status: 400 }
     );
   }
 
-  // Find the last scheduled person to continue rotation from where we left off
+  // Continue the round-robin from where the previous rotation left off, but
+  // ONLY among the regular pool. If the last person scheduled prior to this
+  // window was a deprioritized engineer (e.g. a self-assignment), we ignore
+  // that for continuity purposes — the regular pool starts at index 0.
   const lastSchedule = await prisma.schedule.findFirst({
     where: {
       weekStart: { lt: baseDate },
@@ -213,17 +216,25 @@ async function handleGenerateRotation(body: {
     orderBy: { weekStart: "desc" },
   });
 
-  let startIndex = 0;
-  if (lastSchedule) {
-    const lastEngineerIndex = rotationOrder.indexOf(lastSchedule.userId);
-    if (lastEngineerIndex !== -1) {
-      startIndex = (lastEngineerIndex + 1) % rotationOrder.length;
+  let regularIdx = 0;
+  if (lastSchedule && regularPool.length > 0) {
+    const i = regularPool.indexOf(lastSchedule.userId);
+    if (i !== -1) {
+      regularIdx = (i + 1) % regularPool.length;
     }
   }
 
-  // Build schedule entries only for open weeks
+  // Build schedule entries only for open weeks.
+  //
+  // Deprioritization rule: every regular engineer must be scheduled at least
+  // once in this window before any deprioritized engineer is picked. Only
+  // after regularAssigned >= regularPool.length do we start pulling from the
+  // deprioritized pool. If there are no deprioritized engineers, we simply
+  // keep cycling regulars. If there are no regulars (all volunteered), we
+  // fall straight through to the deprioritized pool.
   const schedules: any[] = [];
-  let rotationIdx = startIndex;
+  let regularAssignedThisWindow = 0;
+  let deprioIdx = 0;
 
   for (let i = 0; i < weeks; i++) {
     const weekStartDate = addWeeks(baseDate, i);
@@ -234,7 +245,21 @@ async function handleGenerateRotation(body: {
     }
 
     const weekEndDate = addDays(weekStartDate, 6);
-    const engineerId = rotationOrder[rotationIdx % rotationOrder.length];
+
+    let engineerId: string;
+    const regularsExhausted =
+      regularPool.length === 0 ||
+      (deprioritizedPool.length > 0 &&
+        regularAssignedThisWindow >= regularPool.length);
+
+    if (!regularsExhausted) {
+      engineerId = regularPool[regularIdx % regularPool.length];
+      regularIdx++;
+      regularAssignedThisWindow++;
+    } else {
+      engineerId = deprioritizedPool[deprioIdx % deprioritizedPool.length];
+      deprioIdx++;
+    }
 
     schedules.push({
       userId: engineerId,
@@ -243,8 +268,6 @@ async function handleGenerateRotation(body: {
       isOverride: false,
       isSelfAssigned: false,
     });
-
-    rotationIdx++;
   }
 
   // Upsert schedules

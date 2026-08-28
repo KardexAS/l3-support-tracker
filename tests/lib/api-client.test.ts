@@ -455,28 +455,46 @@ describe("api.users.approve", () => {
   });
 });
 
-// ─── Calendar Token ──────────────────────────────────────────────────────────
+// ─── Schedule ICS Download ───────────────────────────────────────────────────
 
-describe("api.calendarToken", () => {
-  it("get() calls GET /api/calendar-token", async () => {
-    mockFetch.mockResolvedValueOnce(
-      jsonResponse({ token: "abc123", url: "https://example.com/api/schedule/calendar.ics?token=abc123", createdAt: "2026-01-01" })
-    );
-    const result = await api.calendarToken.get();
+describe("api.schedule.downloadIcs", () => {
+  it("fetches /api/schedule/calendar/download and triggers a browser download", async () => {
+    const blob = new Blob(["BEGIN:VCALENDAR\r\nEND:VCALENDAR"], {
+      type: "text/calendar",
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      blob: () => Promise.resolve(blob),
+    });
+
+    // Stub URL + DOM APIs used by the download helper
+    const createObjectURL = vi.fn(() => "blob:mock-url");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
+
+    const click = vi.fn();
+    const appendChild = vi.fn();
+    const removeChild = vi.fn();
+    const anchor: any = { click, href: "", download: "" };
+    vi.stubGlobal("document", {
+      createElement: vi.fn(() => anchor),
+      body: { appendChild, removeChild },
+    });
+
+    await api.schedule.downloadIcs();
+
     const { url, method } = lastFetchCall();
     expect(method).toBe("GET");
-    expect(url).toBe("/api/calendar-token");
-    expect(result.token).toBe("abc123");
+    expect(url).toBe("/api/schedule/calendar/download");
+    expect(createObjectURL).toHaveBeenCalledWith(blob);
+    expect(anchor.download).toBe("oncall-schedule.ics");
+    expect(click).toHaveBeenCalled();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock-url");
   });
 
-  it("regenerate() calls POST /api/calendar-token", async () => {
-    mockFetch.mockResolvedValueOnce(
-      jsonResponse({ token: "newtoken123", url: "https://example.com/api/schedule/calendar.ics?token=newtoken123" })
-    );
-    const result = await api.calendarToken.regenerate();
-    const { url, method } = lastFetchCall();
-    expect(method).toBe("POST");
-    expect(url).toBe("/api/calendar-token");
-    expect(result.token).toBe("newtoken123");
+  it("throws ApiError on non-ok response", async () => {
+    mockFetch.mockResolvedValueOnce(errorResponse(401, "Unauthorized"));
+    await expect(api.schedule.downloadIcs()).rejects.toBeInstanceOf(ApiError);
   });
 });

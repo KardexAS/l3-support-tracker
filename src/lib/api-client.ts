@@ -96,6 +96,30 @@ export const api = {
     /** Delete a schedule entry. */
     delete: (id: string) =>
       request(`/api/schedule?id=${id}`, { method: "DELETE" }),
+
+    /** Download the on-call schedule as an .ics file (triggers a browser download). */
+    downloadIcs: async () => {
+      const res = await fetch("/api/schedule/calendar/download");
+      if (!res.ok) {
+        let message = `Request failed (${res.status})`;
+        try {
+          const data = await res.json();
+          if (data.error) message = data.error;
+        } catch {
+          // Non-JSON response; keep generic message
+        }
+        throw new ApiError(res.status, message);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "oncall-schedule.ics";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    },
   },
 
   // ── Calls ────────────────────────────────────────────────────────────────
@@ -245,18 +269,5 @@ export const api = {
     /** Generate/regenerate the invite code (admin). */
     regenerate: () =>
       request<{ code: string }>("/api/invite-code", { method: "POST" }),
-  },
-
-  // ── Calendar Token ──────────────────────────────────────────────────────
-  calendarToken: {
-    /** Get the current calendar subscription token and URL (admin). */
-    get: () =>
-      request<{ token: string | null; url: string | null; createdAt: string | null }>(
-        "/api/calendar-token"
-      ),
-
-    /** Generate/regenerate the calendar subscription token (admin). */
-    regenerate: () =>
-      request<{ token: string; url: string }>("/api/calendar-token", { method: "POST" }),
   },
 };
